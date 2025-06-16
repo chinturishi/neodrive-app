@@ -1,0 +1,108 @@
+.register-container {
+  width: 300px;
+  margin: auto;
+  padding: 2rem 1.2rem 1.2rem 1.2rem;
+  background: linear-gradient(135deg, #e0f7fa 0%, #e8fdf5 100%);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.12);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.register-title {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 1.3rem;
+  color: #17696a;
+  letter-spacing: 1px;
+}
+
+.register-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  width: 100%;
+  align-items: center;
+}
+
+.form-group {
+  width: 100%;
+  max-width: 240px;
+  margin: 0 auto 0.4rem auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.register-form label {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-weight: 600;
+  color: #17696a;
+  font-size: 1rem;
+  text-align: left;
+}
+
+.register-form input {
+  width: 100%;
+  padding: 0.6rem 0.8rem;
+  border: 1.2px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 1rem;
+  background: #fff;
+  box-sizing: border-box;
+  transition: border 0.2s;
+}
+
+.register-form input:focus {
+  border: 1.2px solid #2ad1b4;
+  outline: none;
+}
+
+.register-form .button-group {
+  width: 100%;
+  max-width: 240px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.register-form button {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.7rem 0;
+  background: linear-gradient(90deg, #1cc7d0 0%, #24e389 100%);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+  margin-top: 0.4rem;
+  box-shadow: 0 2px 8px rgba(44, 114, 217, 0.07);
+}
+
+.register-form button:hover {
+  background: linear-gradient(90deg, #1cc7d0 0%, #1edb8a 100%);
+  box-shadow: 0 4px 16px rgba(44, 114, 217, 0.13);
+}
+
+.login-link {
+  margin-top: 1rem;
+  font-size: 0.98rem;
+}
+
+.login-link a {
+  color: #1cc7d0;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.login-link a:hover {
+  text-decoration: underline;
+}

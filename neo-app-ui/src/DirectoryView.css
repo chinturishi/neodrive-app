@@ -1,0 +1,108 @@
+.directory-view {
+  width: 80vw;
+  max-width: 1200px;
+  margin: 16px auto 0 auto;
+  padding: 24px 24px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(60, 60, 60, 0.06);
+  border: 2px dashed red;
+}
+
+.directory-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.directory-title {
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: #1a237e;
+  margin: 0;
+}
+
+.directory-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 26px;
+  color: #1976d2;
+  padding: 0 6px;
+  transition: color 0.15s;
+}
+.icon-btn:hover {
+  color: #0d47a1;
+}
+
+.directory-search {
+  margin-left: 24px;
+  padding: 7px 14px;
+  border-radius: 6px;
+  border: 1px solid #cfd8dc;
+  font-size: 15px;
+  min-width: 280px;
+  outline: none;
+}
+
+.directory-divider {
+  margin: 18px 0 24px 0;
+  border: 0;
+  border-top: 2px solid #e3e3e3;
+}
+
+.directory-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.directory-item {
+  display: flex;
+  align-items: center;
+  background: #fafbfc;
+  border: 1.5px solid #e3e3e3;
+  border-radius: 7px;
+  padding: 12px 18px;
+  box-shadow: 0 1px 4px rgba(60, 60, 60, 0.04);
+  justify-content: space-between;
+}
+
+.directory-item-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.folder-icon {
+  font-size: 24px;
+  color: #fbc02d;
+}
+
+.folder-name {
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.item-menu {
+  font-size: 22px;
+  color: #757575;
+  cursor: pointer;
+  padding: 0 4px;
+  transition: color 0.15s;
+}
+.item-menu:hover {
+  color: #333;
+}
+
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
