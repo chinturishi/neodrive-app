@@ -93,3 +93,5 @@ public
 
 # VSCode settings
 .vscode/
+
+serverexpress/storage/*.mp4
