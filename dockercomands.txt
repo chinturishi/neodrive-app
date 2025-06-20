@@ -1,0 +1,12 @@
+docker pull mongo
+docker rm -f mongodb
+docker rm mongodb && docker run -d --name mongodb -p 27017:27017 mongo
+docker run -d --name mongodb -p 27017:27017 mongo
+docker run -d --name mongodb -p 27017:27017 -v /Users/rishmo-blrm24/Documents/MERN/Procodrr/Mongodb/data/db:/data/db mongo
+docker run -d --name mongodb -p 27017:27017 -v mongodb-data:/data/db mongo
+docker run -it -v $(pwd):/repo git-push
+
+
+docker ps
+docker ps -a | grep mongodb
+docker logs mongodb

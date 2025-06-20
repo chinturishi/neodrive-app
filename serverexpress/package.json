@@ -26,7 +26,8 @@
   "license": "ISC",
   "dependencies": {
     "cookie-parser": "^1.4.7",
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "mongodb": "^6.17.0"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.23.0",

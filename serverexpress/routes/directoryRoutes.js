@@ -13,58 +13,79 @@ import {
   renameDirectory,
   updateDirectoryIdInDirectory,
 } from "../utils.js";
+import { ObjectId } from "mongodb";
 
 const router = express.Router();
 
-//Get files list
 router.get("{/:id}", async (req, res) => {
   try {
+    const db = req.db;
+    const directories = db.collection("directories");
+    const files = db.collection("files");
     console.log("inside the directory routes");
     const { id } = req.params;
-    console.log(id);
-    // const { userId } = req.cookies;
-    // const user = await getUserById(userId);
     const user = res.user;
-    const userId = user.id;
+    const userId = user._id;
     let directory = null;
     if (!id) {
-      directory = getDirectoryById(user.rootDirId);
+      console.log("inside the if condition");
+      directory = await directories.findOne({
+        _id: ObjectId.createFromHexString(user.directoryId.toString()),
+      });
+      console.log(directory);
     } else {
-      directory = getDirectoryById(id);
+      directory = await directories.findOne({
+        _id: ObjectId.createFromHexString(id),
+      });
+      console.log(directory);
     }
     //console.log(directory);
     if (!directory) {
       res.status(404).json({ message: "Directory not found" });
       return;
     }
-    if (directory.userId !== userId) {
+    if (directory.userId.toString() !== userId.toString()) {
       res.status(403).json({ message: "This directory is not accessible" });
       return;
     }
-    const filesList = getFilesList(directory.id);
+
+    const filesList = directory.files;
     console.log(filesList);
-    const directoriesList = getDirectoriesList(directory.id);
+    const directoriesList = directory.directories;
     console.log(directoriesList);
-    const finalList = filesList.map((fileId) => {
-      const file = getFileById(fileId);
-      return {
-        id: file.id,
-        fileName: file.name,
-        directoryId: file.directoryId,
-      };
-    });
-    const finalDirectoriesList = directoriesList.map((directoryId) => {
-      const directory = getDirectoryById(directoryId);
-      return {
-        id: directory.id,
-        name: directory.name,
-      };
-    });
+    const finalList = await Promise.all(
+      filesList.map(async (fileId) => {
+        const file = await files.findOne({
+          _id: ObjectId.createFromHexString(fileId.toString()),
+        });
+
+        console.log("file", file);
+        return {
+          id: file._id.toString(),
+          fileName: file.name,
+          directoryId: file.directoryId.toString(),
+        };
+      })
+    );
+    console.log("finalList::", finalList);
+    const finalDirectoriesList = await Promise.all(
+      directoriesList.map(async (directoryId) => {
+        const directory = await directories.findOne({
+          _id: ObjectId.createFromHexString(directoryId.toString()),
+        });
+        console.log("directorys::", directory);
+        return {
+          id: directory._id.toString(),
+          name: directory.name,
+        };
+      })
+    );
     const finalData = {
-      id: directory.id,
+      id: directory._id.toString(),
       files: finalList,
       directories: finalDirectoriesList,
     };
+    console.log("finalData");
     console.log(finalData);
 
     res.json(finalData);
@@ -75,27 +96,28 @@ router.get("{/:id}", async (req, res) => {
 });
 
 //create folder
-router.post("{/:directoryId}", async (req, res) => {
+router.post("/:directoryId", async (req, res) => {
   try {
     console.log("inside the create folder route");
-    //const { userId } = req.cookies;
-    //const user = await getUserById(userId);
+    const db = req.db;
+    const directories = db.collection("directories");
     const user = res.user;
-    const userId = user.id;
     const directoryId = req.params.directoryId || user.rootDirId;
     console.log(directoryId);
     const { directoryname: directoryName } = req.headers;
-    const randomUUID = getRandomUUID();
-    const newDirectory = {
-      id: randomUUID,
+    const tempDirectory = {
       name: directoryName,
-      parentDir: directoryId,
-      userId,
+      parentDir: ObjectId.createFromHexString(directoryId),
       files: [],
       directories: [],
     };
-    await addDirectoryToDirectory(newDirectory);
-    await updateDirectoryIdInDirectory(directoryId, randomUUID);
+    const { insertedId: childDirectoryId } = await directories.insertOne(
+      tempDirectory
+    );
+    await directories.updateOne(
+      { _id: ObjectId.createFromHexString(directoryId) },
+      { $push: { directories: childDirectoryId } }
+    );
     res.status(201).json({ message: "Folder created" });
   } catch (err) {
     console.log(err);

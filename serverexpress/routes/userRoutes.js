@@ -1,47 +1,53 @@
 import express from "express";
-import {
-  addDirectoryToDirectory,
-  createUser,
-  getRandomUUID,
-  getUserByEmail,
-} from "../utils.js";
 import checkAuth from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
+//Register user
 router.post("/register", async (req, res) => {
   try {
+    //const db: Db = req.db;
+    const db = req.db;
+    const directories = db.collection("directories");
+    const users = db.collection("users");
     const { name, email, password } = req.body;
-    const isUserExists = await getUserByEmail(email);
+    const isUserExists = await users.findOne({ email });
     if (isUserExists) {
       return res.status(409).json({ message: "User already exists" });
     }
-    const directoryId = getRandomUUID();
-    const userId = getRandomUUID();
     const directory = {
-      id: directoryId,
       name: `root-${email}`,
-      userId: userId,
       parentDir: null,
       files: [],
       directories: [],
     };
-    await addDirectoryToDirectory(directory);
-    const user = await createUser(userId, name, email, password, directoryId);
-    res.status(201).json({ message: user });
+    const { insertedId: directoryId } = await directories.insertOne(directory);
+    const { insertedId: userId } = await users.insertOne({
+      name,
+      email,
+      password,
+      directoryId,
+    });
+    await directories.updateOne({ _id: directoryId }, { $set: { userId } });
+    res.status(201).json({ message: "Logged in successfully" });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
+//Login user
 router.post("/login", async (req, res) => {
   try {
+    const db = req.db;
+    const users = db.collection("users");
     const { email, password } = req.body;
-    const isUserExists = await getUserByEmail(email);
-    if (!isUserExists || isUserExists.password !== password) {
+    const isUserExists = await users.findOne({ email, password });
+    console.log(isUserExists);
+    if (!isUserExists) {
       return res.status(409).json({ message: "Invalid email or password" });
     }
-    res.cookie("userId", isUserExists.id, {
+    console.log(isUserExists._id.toString());
+    res.cookie("userId", isUserExists._id.toString(), {
       sameSite: "none",
       secure: true,
       httpOnly: true,
@@ -53,11 +59,13 @@ router.post("/login", async (req, res) => {
   }
 });
 
+//Logout user
 router.post("/logout", checkAuth, (req, res) => {
   res.clearCookie("userId");
   res.status(200).json({ message: "Logged out successfully" });
 });
 
+//Get user details
 router.get("/", checkAuth, (req, res) => {
   res.status(200).json({ name: res.user.name, email: res.user.email });
 });

@@ -15,26 +15,26 @@ import {
 } from "../utils.js";
 import mime from "mime-types";
 import validateFileId from "../middleware/validationMiddleware.js";
+import { ObjectId } from "mongodb";
 
 const router = express.Router();
 
 //Download or open file
 router.get("/:id", async (req, res) => {
   try {
-    // const { id } = req;
-    // const file = getFileById(id);
-    // if (!file) return res.status(404).json({ message: "File not found" });
+    const db = req.db;
     const file = req.file;
-    const id = file.id;
+    const id = file._id;
 
     const directoryId = file.directoryId;
-    const directory = getDirectoryById(directoryId);
-    const userId = directory.userId;
-
-    if (userId !== res.user.id) {
+    const directories = db.collection("directories");
+    const directory = await directories.findOne({
+      _id: directoryId,
+    });
+    const userId = directory.userId.toString();
+    if (userId !== res.user._id.toString()) {
       return res.status(403).json({ message: "This file is not accessible" });
     }
-
     const fileName = `${id}${file.extension}`;
     const filePath = path.join(process.cwd(), "storage", fileName);
 
@@ -59,23 +59,35 @@ router.get("/:id", async (req, res) => {
 router.post("/:filename", async (req, res) => {
   console.log("upload file");
   console.log(req.headers);
+  const db = req.db;
+  const directories = db.collection("directories");
+  const files = db.collection("files");
   try {
     const { filename } = req.params;
     const { directoryid: directoryId } = req.headers;
-    const randomUUID = getRandomUUID();
+    const directory = await directories.findOne({
+      _id: new ObjectId(directoryId),
+    });
+    if (!directory) {
+      return res.status(404).json({ message: "Directory not found" });
+    }
     const fileExtension = getFileExtension(filename);
-    const fullFilename = `${randomUUID}${fileExtension}`;
+    const file = await files.insertOne({
+      name: filename,
+      extension: getFileExtension(filename),
+      directoryId: directory._id,
+    });
+    console.log("file", file);
+    const fileId = file.insertedId.toString();
+    const fullFilename = `${fileId}${fileExtension}`;
     const writeStream = createWriteStream(`./storage/${fullFilename}`);
     req.pipe(writeStream);
     req.on("end", async () => {
       writeStream.end();
-      await addDataToFileDBJSON({
-        id: randomUUID,
-        extension: fileExtension,
-        name: filename,
-        directoryId,
-      });
-      await updateFileIdInDirectory(directoryId, randomUUID);
+      await directories.updateOne(
+        { _id: directory._id },
+        { $push: { files: fileId } }
+      );
       res.json({ message: "File created" });
     });
   } catch (err) {
