@@ -1,156 +1,333 @@
 import express from "express";
-
-import {
-  deleteDirectory,
-  getDirectoriesList,
-  getFilesList,
-  removeDirectoryFromParentDirectory,
-  renameDirectory,
-} from "../utils.js";
 import { ObjectId } from "mongodb";
 
 const router = express.Router();
 
-//get folder details
+/**
+ * Validate directory ID and check if it exists
+ */
+const validateDirectoryId = async (req, res, next, id) => {
+  try {
+    if (!id) {
+      return next();
+    }
+
+    const db = req.db;
+    const directories = db.collection("directories");
+
+    let directoryId;
+    try {
+      directoryId = ObjectId.createFromHexString(id);
+    } catch (err) {
+      return res.status(400).json({ message: "Invalid directory ID format" });
+    }
+
+    const directory = await directories.findOne({ _id: directoryId });
+
+    if (!directory) {
+      return res.status(404).json({ message: "Directory not found" });
+    }
+
+    req.directory = directory;
+    next();
+  } catch (err) {
+    res.status(500).json({ message: "Error validating directory" });
+  }
+};
+
+/**
+ * Check if user has access to the directory
+ */
+const checkDirectoryAccess = async (req, res, next) => {
+  try {
+    const directory = req.directory;
+
+    if (!directory) {
+      return next(); // Skip if no directory (will be handled by route handler)
+    }
+
+    const userId = res.user._id.toString();
+
+    if (directory.userId && directory.userId.toString() !== userId) {
+      return res
+        .status(403)
+        .json({ message: "This directory is not accessible" });
+    }
+
+    next();
+  } catch (err) {
+    res.status(500).json({ message: "Error checking directory access" });
+  }
+};
+
+/**
+ * @route   GET /directory/:id?
+ * @desc    Get directory contents
+ * @access  Private
+ */
 router.get("{/:id}", async (req, res) => {
   try {
-    console.log("inside the directory routes");
     const db = req.db;
     const directories = db.collection("directories");
     const files = db.collection("files");
-    const { id } = req.params;
     const user = res.user;
     const userId = user._id.toString();
-    let directory = null;
-    if (!id) {
+
+    // If directory already loaded by param middleware
+    let directory = req.directory;
+
+    // If no ID provided or invalid, get user's root directory
+    if (!directory) {
       directory = await directories.findOne({
         _id: ObjectId.createFromHexString(user.directoryId.toString()),
       });
-    } else {
-      directory = await directories.findOne({
-        _id: ObjectId.createFromHexString(id),
-      });
-    }
-    if (!directory) {
-      res.status(404).json({ message: "Directory not found" });
-      return;
-    }
-    //console.log("directory", directory);
 
-    if (directory.userId.toString() !== userId.toString()) {
-      res.status(403).json({ message: "This directory is not accessible" });
-      return;
+      if (!directory) {
+        return res.status(404).json({ message: "Root directory not found" });
+      }
     }
 
-    const filesList = directory.files;
-    const directoriesList = directory.directories;
+    // Check access
+    if (directory.userId && directory.userId.toString() !== userId) {
+      return res
+        .status(403)
+        .json({ message: "This directory is not accessible" });
+    }
+
+    // Get files in directory
+    const filesList = directory.files || [];
+    const directoriesList = directory.directories || [];
+
+    // Get file details
     const finalList = await Promise.all(
       filesList.map(async (fileId) => {
-        const file = await files.findOne({
-          _id: ObjectId.createFromHexString(fileId.toString()),
-        });
+        try {
+          const file = await files.findOne({
+            _id: ObjectId.createFromHexString(fileId.toString()),
+          });
 
-        return {
-          id: file._id.toString(),
-          fileName: file.name,
-          directoryId: file.directoryId.toString(),
-        };
+          if (!file) return null;
+
+          return {
+            id: file._id.toString(),
+            fileName: file.name,
+            directoryId: file.directoryId.toString(),
+            extension: file.extension,
+            createdAt: file.createdAt,
+            updatedAt: file.updatedAt,
+          };
+        } catch (err) {
+          return null;
+        }
       })
     );
+
+    // Get subdirectory details
     const finalDirectoriesList = await Promise.all(
       directoriesList.map(async (directoryId) => {
-        const directory = await directories.findOne({
-          _id: ObjectId.createFromHexString(directoryId.toString()),
-        });
-        return {
-          id: directory._id.toString(),
-          name: directory.name,
-        };
+        try {
+          const dir = await directories.findOne({
+            _id: ObjectId.createFromHexString(directoryId.toString()),
+          });
+
+          if (!dir) return null;
+
+          return {
+            id: dir._id.toString(),
+            name: dir.name,
+            createdAt: dir.createdAt,
+            updatedAt: dir.updatedAt,
+          };
+        } catch (err) {
+          return null;
+        }
       })
     );
+
+    // Filter out null values (missing files/directories)
     const finalData = {
       id: directory._id.toString(),
-      files: finalList,
-      directories: finalDirectoriesList,
+      name: directory.name,
+      files: finalList.filter(Boolean),
+      directories: finalDirectoriesList.filter(Boolean),
+      parentDir: directory.parentDir ? directory.parentDir.toString() : null,
     };
 
     res.json(finalData);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: "Error retrieving directory contents" });
   }
 });
 
-//create folder
+/**
+ * @route   POST /directory/:directoryId?
+ * @desc    Create a new folder in the specified directory
+ * @access  Private
+ */
 router.post("/:directoryId", async (req, res) => {
   try {
     const db = req.db;
     const directories = db.collection("directories");
     const user = res.user;
-    const directoryId = req.params.directoryId || user.rootDirId;
+
+    // Get parent directory ID (from param or user's root dir)
+    const directoryId = req.params.directoryId || user.directoryId.toString();
     const { directoryname: directoryName } = req.headers;
-    const tempDirectory = {
+
+    if (!directoryName) {
+      return res.status(400).json({ message: "Directory name is required" });
+    }
+
+    // Verify parent directory exists
+    let parentDirId;
+    try {
+      parentDirId = ObjectId.createFromHexString(directoryId);
+    } catch (err) {
+      return res.status(400).json({ message: "Invalid parent directory ID" });
+    }
+
+    const parentDir = await directories.findOne({ _id: parentDirId });
+
+    if (!parentDir) {
+      return res.status(404).json({ message: "Parent directory not found" });
+    }
+
+    // Check if user has access to parent directory
+    if (
+      parentDir.userId &&
+      parentDir.userId.toString() !== user._id.toString()
+    ) {
+      return res
+        .status(403)
+        .json({ message: "You don't have permission to create folders here" });
+    }
+
+    // Create new directory
+    const newDirectory = {
       name: directoryName,
-      parentDir: ObjectId.createFromHexString(directoryId),
+      parentDir: parentDirId,
       files: [],
       directories: [],
       userId: user._id,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
+
     const { insertedId: childDirectoryId } = await directories.insertOne(
-      tempDirectory
+      newDirectory
     );
+
+    // Update parent directory
     await directories.updateOne(
-      { _id: ObjectId.createFromHexString(directoryId) },
+      { _id: parentDirId },
       { $push: { directories: childDirectoryId } }
     );
-    res.status(201).json({ message: "Folder created" });
+
+    res.status(201).json({
+      message: "Folder created",
+      directoryId: childDirectoryId.toString(),
+      directoryName,
+    });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: "Error creating folder" });
   }
 });
 
-//delete folder
-router.delete("/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const directory = getDirectoryById(id);
-    if (!directory) {
-      throw new Error("Folder not found");
-    }
-    const filesList = getFilesList(id);
-    const directoriesList = getDirectoriesList(id);
-    if (filesList.length !== 0 || directoriesList.length !== 0) {
-      res.status(500).json({ message: "Non Empty Folder can't be deleted" });
-    } else {
-      await removeDirectoryFromParentDirectory(id, directory.parentDir);
-      await deleteDirectory(id);
-      res.json({ message: "Folder deleted" });
-    }
-  } catch (error) {
-    res.status(500).json({ message: "Folder not found" });
-  }
-});
+/**
+ * @route   DELETE /directory/:id
+ * @desc    Delete a directory
+ * @access  Private
+ */
+router.delete(
+  "/:id",
+  validateDirectoryId,
+  checkDirectoryAccess,
+  async (req, res) => {
+    try {
+      const db = req.db;
+      const directories = db.collection("directories");
+      const directory = req.directory;
 
-//rename folder
-router.patch("/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const db = req.db;
-    const directories = db.collection("directories");
-    const result = await directories.updateOne(
-      { _id: ObjectId.createFromHexString(id) },
-      { $set: { name: req.body.NewDirectoryName } }
-    );
-    if (result.modifiedCount === 0) {
-      return res.status(404).json({ message: "Folder not found" });
-    }
-    res.json({ message: "Folder renamed" });
-  } catch (err) {
-    if (err.code === "ENOENT") {
-      res.status(404).json({ message: "Folder not found" });
-    } else {
-      res.status(500).json({ message: err.message });
+      // Check if directory is empty
+      if (
+        (directory.files && directory.files.length > 0) ||
+        (directory.directories && directory.directories.length > 0)
+      ) {
+        return res
+          .status(400)
+          .json({ message: "Cannot delete non-empty directory" });
+      }
+
+      // Remove directory from parent
+      if (directory.parentDir) {
+        await directories.updateOne(
+          { _id: directory.parentDir },
+          { $pull: { directories: directory._id } }
+        );
+      }
+
+      // Delete directory
+      const result = await directories.deleteOne({ _id: directory._id });
+
+      if (result.deletedCount === 0) {
+        return res.status(404).json({ message: "Directory not found" });
+      }
+
+      res.json({ message: "Directory deleted successfully" });
+    } catch (error) {
+      res.status(500).json({ message: "Error deleting directory" });
     }
   }
-});
+);
+
+/**
+ * @route   PATCH /directory/:id
+ * @desc    Rename a directory
+ * @access  Private
+ */
+router.patch(
+  "/:id",
+  validateDirectoryId,
+  checkDirectoryAccess,
+  async (req, res) => {
+    try {
+      const db = req.db;
+      const directories = db.collection("directories");
+      const directory = req.directory;
+
+      if (!req.body.NewDirectoryName) {
+        return res
+          .status(400)
+          .json({ message: "New directory name is required" });
+      }
+
+      const result = await directories.updateOne(
+        { _id: directory._id },
+        {
+          $set: {
+            name: req.body.NewDirectoryName,
+            updatedAt: new Date(),
+          },
+        }
+      );
+
+      if (result.modifiedCount === 0) {
+        return res
+          .status(404)
+          .json({ message: "Directory not found or no changes made" });
+      }
+
+      res.json({
+        message: "Directory renamed successfully",
+        newName: req.body.NewDirectoryName,
+      });
+    } catch (err) {
+      res.status(500).json({ message: "Error renaming directory" });
+    }
+  }
+);
+
+// Register param middleware
+router.param("id", validateDirectoryId);
 
 export default router;

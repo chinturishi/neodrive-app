@@ -10,3 +10,6 @@ docker run -it -v $(pwd):/repo git-push
 docker ps
 docker ps -a | grep mongodb
 docker logs mongodb
+
+docker exec -it 304a55dc5660 git config --global user.email "rishi_kanta@hotmail.com"
+docker exec -it 304a55dc5660 git config --global user.name "chinturishi"

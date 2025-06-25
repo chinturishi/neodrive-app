@@ -3,69 +3,175 @@ import checkAuth from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-//Register user
-router.post("/register", async (req, res) => {
+/**
+ * Validate user input for registration
+ */
+const validateRegistration = (req, res, next) => {
+  const { name, email, password } = req.body;
+
+  if (!name || !email || !password) {
+    return res
+      .status(400)
+      .json({ message: "Name, email, and password are required" });
+  }
+
+  // Basic email validation
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({ message: "Invalid email format" });
+  }
+
+  // Password strength validation
+  if (password.length < 6) {
+    return res
+      .status(400)
+      .json({ message: "Password must be at least 6 characters long" });
+  }
+
+  next();
+};
+
+/**
+ * Validate user input for login
+ */
+const validateLogin = (req, res, next) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ message: "Email and password are required" });
+  }
+
+  next();
+};
+
+/**
+ * @route   POST /user/register
+ * @desc    Register a new user
+ * @access  Public
+ */
+router.post("/register", validateRegistration, async (req, res) => {
   try {
-    //const db: Db = req.db;
     const db = req.db;
     const directories = db.collection("directories");
     const users = db.collection("users");
     const { name, email, password } = req.body;
+
+    // Check if user already exists
     const isUserExists = await users.findOne({ email });
     if (isUserExists) {
       return res.status(409).json({ message: "User already exists" });
     }
+
+    // Create root directory for user
     const directory = {
       name: `root-${email}`,
       parentDir: null,
       files: [],
       directories: [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
+
     const { insertedId: directoryId } = await directories.insertOne(directory);
+
+    // Create user
     const { insertedId: userId } = await users.insertOne({
       name,
       email,
-      password,
+      password, // In a real app, this should be hashed
       directoryId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     });
+
+    // Update directory with user ID
     await directories.updateOne({ _id: directoryId }, { $set: { userId } });
-    res.status(201).json({ message: "Logged in successfully" });
+
+    res.status(201).json({
+      message: "User registered successfully",
+      userId: userId.toString(),
+    });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: "Error registering user" });
   }
 });
 
-//Login user
-router.post("/login", async (req, res) => {
+/**
+ * @route   POST /user/login
+ * @desc    Login user
+ * @access  Public
+ */
+router.post("/login", validateLogin, async (req, res) => {
   try {
     const db = req.db;
     const users = db.collection("users");
     const { email, password } = req.body;
-    const isUserExists = await users.findOne({ email, password });
-    if (!isUserExists) {
-      return res.status(409).json({ message: "Invalid email or password" });
+
+    // Find user
+    const user = await users.findOne({ email, password });
+    if (!user) {
+      return res.status(401).json({ message: "Invalid email or password" });
     }
-    res.cookie("userId", isUserExists._id.toString(), {
+
+    // Set cookie
+    res.cookie("userId", user._id.toString(), {
       sameSite: "none",
       secure: true,
       httpOnly: true,
-      maxAge: 1000 * 60 * 60 * 24,
+      maxAge: 1000 * 60 * 60 * 24, // 1 day
     });
-    res.status(201).json({ message: "Logged in successfully" });
+
+    res.status(200).json({
+      message: "Logged in successfully",
+      user: {
+        id: user._id.toString(),
+        name: user.name,
+        email: user.email,
+      },
+    });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: "Error during login" });
   }
 });
 
-//Logout user
+/**
+ * @route   POST /user/logout
+ * @desc    Logout user
+ * @access  Private
+ */
 router.post("/logout", checkAuth, (req, res) => {
-  res.clearCookie("userId");
-  res.status(200).json({ message: "Logged out successfully" });
+  try {
+    res.clearCookie("userId", {
+      sameSite: "none",
+      secure: true,
+      httpOnly: true,
+    });
+    res.status(200).json({ message: "Logged out successfully" });
+  } catch (err) {
+    res.status(500).json({ message: "Error during logout" });
+  }
 });
 
-//Get user details
+/**
+ * @route   GET /user
+ * @desc    Get current user details
+ * @access  Private
+ */
 router.get("/", checkAuth, (req, res) => {
-  res.status(200).json({ name: res.user.name, email: res.user.email });
+  try {
+    if (!res.user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json({
+      id: res.user._id.toString(),
+      name: res.user.name,
+      email: res.user.email,
+      directoryId: res.user.directoryId?.toString(),
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Error retrieving user details" });
+  }
 });
 
 export default router;
