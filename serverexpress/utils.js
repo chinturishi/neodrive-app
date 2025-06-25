@@ -37,7 +37,6 @@ async function renameFile(id, newFileName) {
 async function deleteFile(id) {
   const file = getFileById(id);
   const updateFilesDB = filesDB.filter((file) => file.id !== id);
-  console.log(updateFilesDB);
   await writeFile("./db/filesDB.json", JSON.stringify(updateFilesDB));
 }
 
@@ -72,8 +71,6 @@ async function updateFileIdInDirectory(id, fileId) {
 }
 
 async function addDirectoryToDirectory(newDirectory) {
-  console.log("Adding directory to directory");
-  console.log(newDirectory);
   directoriesDB.push(newDirectory);
   await writeFile("./db/directoriesDB.json", JSON.stringify(directoriesDB));
 }

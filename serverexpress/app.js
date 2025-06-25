@@ -43,12 +43,11 @@ try {
   app.use("/file", checkAuth, fileRoutes);
   app.use("/user", userRoutes);
   app.use((error, req, res, next) => {
-    console.log(error);
     res.status(500).json({ message: "Internal Server Error" });
   });
 
   app.listen(5000, () => {
-    console.log("Server is running on port 5000");
+    // Server is running on port 5000
   });
 } catch (error) {
   console.error("Failed to connect to database:", error);

@@ -1,65 +1,55 @@
 import express from "express";
 
 import {
-  addDirectoryToDirectory,
   deleteDirectory,
   getDirectoriesList,
-  getDirectoryById,
-  getFileById,
   getFilesList,
-  getRandomUUID,
-  getUserById,
   removeDirectoryFromParentDirectory,
   renameDirectory,
-  updateDirectoryIdInDirectory,
 } from "../utils.js";
 import { ObjectId } from "mongodb";
 
 const router = express.Router();
 
+//get folder details
 router.get("{/:id}", async (req, res) => {
   try {
+    console.log("inside the directory routes");
     const db = req.db;
     const directories = db.collection("directories");
     const files = db.collection("files");
-    console.log("inside the directory routes");
     const { id } = req.params;
     const user = res.user;
-    const userId = user._id;
+    const userId = user._id.toString();
     let directory = null;
     if (!id) {
-      console.log("inside the if condition");
       directory = await directories.findOne({
         _id: ObjectId.createFromHexString(user.directoryId.toString()),
       });
-      console.log(directory);
     } else {
       directory = await directories.findOne({
         _id: ObjectId.createFromHexString(id),
       });
-      console.log(directory);
     }
-    //console.log(directory);
     if (!directory) {
       res.status(404).json({ message: "Directory not found" });
       return;
     }
+    //console.log("directory", directory);
+
     if (directory.userId.toString() !== userId.toString()) {
       res.status(403).json({ message: "This directory is not accessible" });
       return;
     }
 
     const filesList = directory.files;
-    console.log(filesList);
     const directoriesList = directory.directories;
-    console.log(directoriesList);
     const finalList = await Promise.all(
       filesList.map(async (fileId) => {
         const file = await files.findOne({
           _id: ObjectId.createFromHexString(fileId.toString()),
         });
 
-        console.log("file", file);
         return {
           id: file._id.toString(),
           fileName: file.name,
@@ -67,13 +57,11 @@ router.get("{/:id}", async (req, res) => {
         };
       })
     );
-    console.log("finalList::", finalList);
     const finalDirectoriesList = await Promise.all(
       directoriesList.map(async (directoryId) => {
         const directory = await directories.findOne({
           _id: ObjectId.createFromHexString(directoryId.toString()),
         });
-        console.log("directorys::", directory);
         return {
           id: directory._id.toString(),
           name: directory.name,
@@ -85,12 +73,9 @@ router.get("{/:id}", async (req, res) => {
       files: finalList,
       directories: finalDirectoriesList,
     };
-    console.log("finalData");
-    console.log(finalData);
 
     res.json(finalData);
   } catch (err) {
-    console.log(err);
     res.status(500).json({ message: err.message });
   }
 });
@@ -98,18 +83,17 @@ router.get("{/:id}", async (req, res) => {
 //create folder
 router.post("/:directoryId", async (req, res) => {
   try {
-    console.log("inside the create folder route");
     const db = req.db;
     const directories = db.collection("directories");
     const user = res.user;
     const directoryId = req.params.directoryId || user.rootDirId;
-    console.log(directoryId);
     const { directoryname: directoryName } = req.headers;
     const tempDirectory = {
       name: directoryName,
       parentDir: ObjectId.createFromHexString(directoryId),
       files: [],
       directories: [],
+      userId: user._id,
     };
     const { insertedId: childDirectoryId } = await directories.insertOne(
       tempDirectory
@@ -120,7 +104,6 @@ router.post("/:directoryId", async (req, res) => {
     );
     res.status(201).json({ message: "Folder created" });
   } catch (err) {
-    console.log(err);
     res.status(500).json({ message: err.message });
   }
 });
@@ -133,9 +116,7 @@ router.delete("/:id", async (req, res) => {
     if (!directory) {
       throw new Error("Folder not found");
     }
-    console.log("directory", directory);
     const filesList = getFilesList(id);
-    console.log(filesList);
     const directoriesList = getDirectoriesList(id);
     if (filesList.length !== 0 || directoriesList.length !== 0) {
       res.status(500).json({ message: "Non Empty Folder can't be deleted" });
@@ -145,15 +126,23 @@ router.delete("/:id", async (req, res) => {
       res.json({ message: "Folder deleted" });
     }
   } catch (error) {
-    //console.log(error);
     res.status(500).json({ message: "Folder not found" });
   }
 });
 
+//rename folder
 router.patch("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    await renameDirectory(id, req.body.NewDirectoryName);
+    const db = req.db;
+    const directories = db.collection("directories");
+    const result = await directories.updateOne(
+      { _id: ObjectId.createFromHexString(id) },
+      { $set: { name: req.body.NewDirectoryName } }
+    );
+    if (result.modifiedCount === 0) {
+      return res.status(404).json({ message: "Folder not found" });
+    }
     res.json({ message: "Folder renamed" });
   } catch (err) {
     if (err.code === "ENOENT") {

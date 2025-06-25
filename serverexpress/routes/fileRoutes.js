@@ -3,15 +3,9 @@ import { createWriteStream } from "fs";
 import { rm } from "fs/promises";
 import path from "path";
 import {
-  addDataToFileDBJSON,
   deleteFile,
-  getDirectoryById,
-  getFileById,
   getFileExtension,
-  getRandomUUID,
   removeFileFromDirectory,
-  renameFile,
-  updateFileIdInDirectory,
 } from "../utils.js";
 import mime from "mime-types";
 import validateFileId from "../middleware/validationMiddleware.js";
@@ -41,12 +35,11 @@ router.get("/:id", async (req, res) => {
     // Detect MIME type
     const mimeType = mime.lookup(file.name);
     res.contentType(mimeType);
-    console.log("mimeType", mimeType);
 
     if (req.query.action === "download") {
       return res.download(filePath, file.name);
     }
-    console.log("res", res);
+
     res.sendFile(filePath, (err) => {
       if (err) res.status(404).json({ message: "File not found" });
     });
@@ -57,8 +50,6 @@ router.get("/:id", async (req, res) => {
 
 //upload file
 router.post("/:filename", async (req, res) => {
-  console.log("upload file");
-  console.log(req.headers);
   const db = req.db;
   const directories = db.collection("directories");
   const files = db.collection("files");
@@ -77,7 +68,6 @@ router.post("/:filename", async (req, res) => {
       extension: getFileExtension(filename),
       directoryId: directory._id,
     });
-    console.log("file", file);
     const fileId = file.insertedId.toString();
     const fullFilename = `${fileId}${fileExtension}`;
     const writeStream = createWriteStream(`./storage/${fullFilename}`);
@@ -92,51 +82,69 @@ router.post("/:filename", async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
-    console.log(err);
   }
 });
 
 //delete file
 router.delete("/:id", async (req, res) => {
   try {
-    // const { id } = req.params;
-    // const file = getFileById(id);
+    console.log("inside the delete file route");
+    const filesDb = req.db.collection("files");
+    const directoriesDb = req.db.collection("directories");
     const file = req.file;
-    const id = file.id;
+    console.log("file", file);
+    const id = file._id;
     const directoryId = file.directoryId;
-    const directory = getDirectoryById(directoryId);
+    const directory = await directoriesDb.findOne({
+      _id: directoryId,
+    });
+    console.log("directory", directory);
+
     const userId = directory.userId;
-    if (userId !== res.user.id) {
+    if (userId.toString() !== res.user._id.toString()) {
       return res.status(403).json({ message: "This file is not accessible" });
     }
-    console.log(file);
-    const fileName = `${id}${file.extension}`;
-    console.log(fileName);
+    const fileName = `${id.toString()}${file.extension}`;
+    console.log("fileName", fileName);
     const filePath = path.join(process.cwd(), "storage", fileName);
+    console.log("filePath", filePath);
+    const result = await filesDb.deleteOne({ _id: id });
+    const result2 = await directoriesDb.updateOne(
+      { _id: directoryId },
+      { $pull: { files: id.toString() } }
+    );
+    console.log("result", result);
+    console.log("result2", result2);
     await rm(filePath, { recursive: true, force: true });
-    await removeFileFromDirectory(file.directoryId, id);
-    await deleteFile(id);
     res.json({ message: "File/folder deleted" });
   } catch (error) {
     console.log(error);
-    res.status(500).json({ message: "File not found" });
+    res.status(500).json({ message: error.message });
   }
 });
 
 //rename file
 router.patch("/:id", async (req, res) => {
   try {
-    // const { id } = req.params;
-    // const file = getFileById(id);
+    const filesDb = req.db.collection("files");
+    const directoriesDb = req.db.collection("directories");
     const file = req.file;
-    const id = file.id;
+    const id = file._id;
     const directoryId = file.directoryId;
-    const directory = getDirectoryById(directoryId);
+    const directory = await directoriesDb.findOne({
+      _id: directoryId,
+    });
     const userId = directory.userId;
-    if (userId !== res.user.id) {
+    if (userId.toString() !== res.user._id.toString()) {
       return res.status(403).json({ message: "This file is not accessible" });
     }
-    renameFile(id, req.body.newFileName);
+    const result = await filesDb.updateOne(
+      { _id: id },
+      { $set: { name: req.body.newFileName } }
+    );
+    if (result.modifiedCount === 0) {
+      return res.status(404).json({ message: "File/folder not found" });
+    }
     res.json({ message: "File/folder renamed" });
   } catch (err) {
     if (err.code === "ENOENT") {

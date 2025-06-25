@@ -10,7 +10,6 @@ export default async function checkAuth(req, res, next) {
       _id: ObjectId.createFromHexString(userId),
     });
     //const user = await getUserById(userId);
-    console.log("user logged in", user);
     if (!userId || !user) {
       res.status(401).json({ message: "Session expired" });
       return;

@@ -42,11 +42,9 @@ router.post("/login", async (req, res) => {
     const users = db.collection("users");
     const { email, password } = req.body;
     const isUserExists = await users.findOne({ email, password });
-    console.log(isUserExists);
     if (!isUserExists) {
       return res.status(409).json({ message: "Invalid email or password" });
     }
-    console.log(isUserExists._id.toString());
     res.cookie("userId", isUserExists._id.toString(), {
       sameSite: "none",
       secure: true,

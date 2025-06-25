@@ -7,12 +7,9 @@ export default async function validateFileId(req, res, next, id) {
   // if (!uuidRegex.test(id)) {
   //   return res.status(404).json({ message: "Not a valid UUID" });
   // }
-  console.log("inside the validateFileId middleware");
-  console.log("id", id);
   const db = req.db;
   const files = db.collection("files");
   const file = await files.findOne({ _id: ObjectId.createFromHexString(id) });
-  console.log("file", file);
   if (!file) return res.status(404).json({ message: "File not found" });
   req.file = file;
   next();
