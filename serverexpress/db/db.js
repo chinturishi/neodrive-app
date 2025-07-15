@@ -1,6 +1,8 @@
 import { MongoClient } from "mongodb";
 
-const client = new MongoClient("mongodb://localhost:27017/neo_drive_app");
+export const client = new MongoClient(
+  "mongodb://localhost:27017/neo_drive_app"
+);
 
 export async function connectDB() {
   await client.connect();

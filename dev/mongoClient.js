@@ -1,18 +1,14 @@
 import { MongoClient } from "mongodb";
 
-const uri = "mongodb://localhost:27017";
+const client = new MongoClient("mongodb://localhost:27017/neo_drive_app");
 
-const client = new MongoClient(uri);
+export async function connectDB() {
+  await client.connect();
+  const db = client.db();
+  return db;
+}
 
-await client.connect();
-
-const db = client.db();
-console.log(db.namespace);
-
-// const db = client.db("expense_db");
-
-// const collection = db.collection("expenses");
-
-// const result = await collection.find({}).toArray();
-
-// console.log(result);
+process.on("SIGINT", async () => {
+  await client.close();
+  process.exit(0);
+});

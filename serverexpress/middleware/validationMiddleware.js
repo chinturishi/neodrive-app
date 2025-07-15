@@ -1,5 +1,4 @@
 import { ObjectId } from "mongodb";
-import { getFileById } from "../utils.js";
 
 export default async function validateFileId(req, res, next, id) {
   // const uuidRegex =
@@ -9,6 +8,8 @@ export default async function validateFileId(req, res, next, id) {
   // }
   const db = req.db;
   const files = db.collection("files");
+  const isIdValid = ObjectId.isValid(id);
+  if (!isIdValid) return res.status(404).json({ message: "Not a valid id" });
   const file = await files.findOne({ _id: ObjectId.createFromHexString(id) });
   if (!file) return res.status(404).json({ message: "File not found" });
   req.file = file;

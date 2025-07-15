@@ -1,5 +1,6 @@
 import express from "express";
 import checkAuth from "../middleware/authMiddleware.js";
+import { ObjectId } from "mongodb";
 
 const router = express.Router();
 
@@ -62,20 +63,28 @@ router.post("/register", validateRegistration, async (req, res) => {
       return res.status(409).json({ message: "User already exists" });
     }
 
+    const directoryId = new ObjectId();
+    const userId = new ObjectId();
+
     // Create root directory for user
     const directory = {
+      _id: directoryId,
       name: `root-${email}`,
       parentDir: null,
       files: [],
       directories: [],
       createdAt: new Date(),
       updatedAt: new Date(),
+      userId: userId,
     };
 
-    const { insertedId: directoryId } = await directories.insertOne(directory);
-
+    const directoryResult = await directories.insertOne(directory);
+    if (!directoryResult.acknowledged) {
+      return res.status(500).json({ message: "Error creating directory" });
+    }
     // Create user
-    const { insertedId: userId } = await users.insertOne({
+    const userResult = await users.insertOne({
+      _id: userId,
       name,
       email,
       password, // In a real app, this should be hashed
@@ -83,15 +92,16 @@ router.post("/register", validateRegistration, async (req, res) => {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-
-    // Update directory with user ID
-    await directories.updateOne({ _id: directoryId }, { $set: { userId } });
+    if (!userResult.acknowledged) {
+      return res.status(500).json({ message: "Error creating user" });
+    }
 
     res.status(201).json({
       message: "User registered successfully",
       userId: userId.toString(),
     });
   } catch (err) {
+    console.log("err", err);
     res.status(500).json({ message: "Error registering user" });
   }
 });

@@ -1,13 +1,12 @@
 import { ObjectId } from "mongodb";
-import { getUserById } from "../utils.js";
 
 export default async function checkAuth(req, res, next) {
   try {
     const db = req.db;
     const users = db.collection("users");
     const { userId } = req.cookies;
-    console.log("userId", userId);
-    if (!userId) {
+    const isUserIdValid = ObjectId.isValid(userId);
+    if (!userId || !isUserIdValid) {
       res.status(401).json({ message: "Session expired" });
       return;
     }
